@@ -556,23 +556,31 @@
                             <label class="md:col-span-2 text-xs text-slate-300">Pertanyaan
                                 <textarea id="questionText" required maxlength="5000" rows="3" class="mt-1 w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white"></textarea>
                             </label>
-                            <label class="text-xs text-slate-300">Opsi A
-                                <input id="questionOption0" required class="mt-1 w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white">
-                            </label>
-                            <label class="text-xs text-slate-300">Opsi B
-                                <input id="questionOption1" required class="mt-1 w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white">
-                            </label>
-                            <label class="text-xs text-slate-300">Opsi C
-                                <input id="questionOption2" required class="mt-1 w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white">
-                            </label>
-                            <label class="text-xs text-slate-300">Opsi D
-                                <input id="questionOption3" required class="mt-1 w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white">
-                            </label>
-                            <label class="text-xs text-slate-300">Jawaban benar
-                                <select id="questionCorrectAnswer" class="mt-1 w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white">
-                                    <option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option>
-                                </select>
-                            </label>
+                            <section class="md:col-span-2 rounded-lg border border-slate-800 bg-slate-900/50 p-4">
+                                <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                                    <div><h5 class="text-sm font-semibold text-white">Tabel soal</h5><p class="mt-1 text-xs text-slate-500">Buat header dan isi sel seperti lembar kerja Excel.</p></div>
+                                    <div class="flex gap-2">
+                                        <button type="button" onclick="addQuestionTableColumn()" class="px-2.5 py-2 text-xs text-cyan-300 hover:bg-cyan-500/10 rounded border border-cyan-500/20">Tambah kolom</button>
+                                        <button type="button" onclick="addQuestionTableRow()" class="px-2.5 py-2 text-xs text-cyan-300 hover:bg-cyan-500/10 rounded border border-cyan-500/20">Tambah baris</button>
+                                    </div>
+                                </div>
+                                <div class="overflow-x-auto custom-scrollbar">
+                                    <table class="min-w-full text-xs border-collapse">
+                                        <thead><tr id="questionTableHeaderRow"></tr></thead>
+                                        <tbody id="questionTableBody"></tbody>
+                                    </table>
+                                </div>
+                            </section>
+                            <section class="md:col-span-2 rounded-lg border border-slate-800 bg-slate-900/50 p-4">
+                                <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                                    <div><h5 class="text-sm font-semibold text-white">Opsi jawaban</h5><p class="mt-1 text-xs text-slate-500">Tambahkan pilihan, lalu tentukan kunci jawaban.</p></div>
+                                    <button type="button" onclick="addQuestionOption()" class="px-2.5 py-2 text-xs text-cyan-300 hover:bg-cyan-500/10 rounded border border-cyan-500/20">Tambah opsi</button>
+                                </div>
+                                <div id="questionOptionsEditor" class="space-y-2"></div>
+                                <label class="mt-4 block max-w-sm text-xs text-slate-300">Kunci jawaban
+                                    <select id="questionCorrectAnswer" class="mt-1 w-full px-3 py-2.5 bg-slate-900 border border-emerald-500/40 rounded-lg text-sm text-white"></select>
+                                </label>
+                            </section>
                             <label class="md:col-span-2 text-xs text-slate-300">Penjelasan
                                 <textarea id="questionExplanation" maxlength="5000" rows="2" class="mt-1 w-full px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white"></textarea>
                             </label>
@@ -982,6 +990,8 @@
         ];
 
         let questionBank = [];
+        let questionTableHeaders = [];
+        let questionTableRows = [];
         let studentProfile = { name: "", classId: "", level: "SMP", date: new Date().toISOString().split('T')[0] };
         let currentQuestionIndex = 0;
         let activeQuestions = [];
@@ -1174,6 +1184,16 @@
                 if (button.dataset.questionAction === 'delete') deleteQuestion(questionId);
             });
             document.getElementById('questionEditorForm').addEventListener('submit', saveQuestionFromForm);
+            document.getElementById('questionOptionsEditor').addEventListener('click', (event) => {
+                const button = event.target.closest('[data-remove-option]');
+                if (button) removeQuestionOption(Number(button.dataset.removeOption));
+            });
+            document.getElementById('questionEditor').addEventListener('click', (event) => {
+                const columnButton = event.target.closest('[data-remove-column]');
+                const rowButton = event.target.closest('[data-remove-row]');
+                if (columnButton) removeQuestionTableColumn(Number(columnButton.dataset.removeColumn));
+                if (rowButton) removeQuestionTableRow(Number(rowButton.dataset.removeRow));
+            });
             document.getElementById('questionLevel').addEventListener('change', () => updateQuestionClassOptions());
             updateQuestionClassOptions();
             renderQuestionBank();
@@ -1346,13 +1366,127 @@
             document.getElementById('questionLevel').value = question?.level || 'SMP';
             updateQuestionClassOptions(question?.className || 'all');
             document.getElementById('questionText').value = question?.question || '';
-            for (let index = 0; index < 4; index++) {
-                document.getElementById(`questionOption${index}`).value = question?.options?.[index] || '';
-            }
-            document.getElementById('questionCorrectAnswer').value = String(question?.correctAnswer ?? 0);
+            renderQuestionOptions(question?.options || ['', '', '', ''], question?.correctAnswer || 0);
+            const headers = question?.sheetHeaders?.length ? question.sheetHeaders : ['Kolom A', 'Kolom B', 'Kolom C'];
+            const rows = question?.sheetRows?.length ? question.sheetRows : [[2, '', '', ''], [3, '', '', '']];
+            questionTableHeaders = headers.map((header) => String(header));
+            questionTableRows = rows.map((row) => {
+                const cells = Array.isArray(row) ? row.slice(1) : [];
+                return questionTableHeaders.map((_, index) => String(cells[index] ?? ''));
+            });
+            renderQuestionTable();
             document.getElementById('questionExplanation').value = question?.explanation || '';
             document.getElementById('questionEditor').classList.remove('hidden');
             document.getElementById('questionTopic').focus();
+        }
+
+        function renderQuestionOptions(options, correctAnswer = 0) {
+            const optionList = document.getElementById('questionOptionsEditor');
+            optionList.innerHTML = options.map((option, index) => `
+                <div class="flex items-center gap-2">
+                    <span class="w-7 shrink-0 text-center text-xs font-semibold text-emerald-300">${String.fromCharCode(65 + index)}</span>
+                    <input data-question-option type="text" required maxlength="1000" value="${escapeHtml(option)}" aria-label="Opsi jawaban ${String.fromCharCode(65 + index)}" class="min-w-0 flex-1 px-3 py-2.5 bg-slate-900 border border-slate-700 rounded-lg text-sm text-white">
+                    <button type="button" data-remove-option="${index}" aria-label="Hapus opsi ${String.fromCharCode(65 + index)}" title="Hapus opsi" class="w-9 h-9 shrink-0 grid place-items-center text-rose-300 hover:bg-rose-500/10 rounded border border-rose-500/20"><i data-lucide="x" class="w-4 h-4"></i></button>
+                </div>`).join('');
+            const answerSelect = document.getElementById('questionCorrectAnswer');
+            answerSelect.innerHTML = options.map((_, index) => `<option value="${index}">${String.fromCharCode(65 + index)}</option>`).join('');
+            answerSelect.value = String(Math.min(correctAnswer, options.length - 1));
+            lucide.createIcons();
+        }
+
+        function addQuestionOption() {
+            const options = [...document.querySelectorAll('[data-question-option]')].map((input) => input.value);
+            if (options.length >= 8) {
+                setAdminQuestionsMessage('Maksimal delapan opsi jawaban.', true);
+                return;
+            }
+            options.push('');
+            renderQuestionOptions(options, Number(document.getElementById('questionCorrectAnswer').value));
+            document.querySelector('[data-question-option]:last-of-type')?.focus();
+        }
+
+        function removeQuestionOption(index) {
+            const options = [...document.querySelectorAll('[data-question-option]')].map((input) => input.value);
+            if (options.length <= 2) {
+                setAdminQuestionsMessage('Soal harus memiliki minimal dua opsi.', true);
+                return;
+            }
+            const selectedAnswer = Number(document.getElementById('questionCorrectAnswer').value);
+            options.splice(index, 1);
+            const nextAnswer = selectedAnswer === index ? 0 : selectedAnswer > index ? selectedAnswer - 1 : selectedAnswer;
+            renderQuestionOptions(options, nextAnswer);
+        }
+
+        function readQuestionTableFromEditor() {
+            const headers = [...document.querySelectorAll('[data-table-header]')].map((input) => input.value.trim());
+            const rows = [...document.querySelectorAll('#questionTableBody tr')].map((row, rowIndex) => (
+                [...row.querySelectorAll('[data-table-cell]')].map((input) => input.value)
+            ));
+            return { headers, rows };
+        }
+
+        function renderQuestionTable() {
+            const headerRow = document.getElementById('questionTableHeaderRow');
+            const body = document.getElementById('questionTableBody');
+            headerRow.innerHTML = `<th class="w-12 border border-slate-700 bg-slate-800 px-2 py-2 text-center text-slate-400">#</th>${questionTableHeaders.map((header, index) => `
+                <th class="min-w-40 border border-slate-700 bg-slate-800 p-1.5">
+                    <div class="flex items-center gap-1">
+                        <input data-table-header value="${escapeHtml(header)}" aria-label="Header kolom ${index + 1}" class="min-w-0 w-full bg-slate-900 px-2 py-2 rounded text-left font-medium text-white outline-none focus:ring-1 focus:ring-emerald-500">
+                        <button type="button" data-remove-column="${index}" aria-label="Hapus kolom ${index + 1}" title="Hapus kolom" class="w-7 h-8 shrink-0 grid place-items-center text-rose-300 hover:bg-rose-500/10 rounded"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
+                    </div>
+                </th>`).join('')}`;
+            body.innerHTML = questionTableRows.map((row, rowIndex) => `
+                <tr>
+                    <td class="border border-slate-800 bg-slate-950 px-2 py-1 text-center text-slate-500">
+                        <div class="flex items-center gap-1"><span class="flex-1">${rowIndex + 2}</span><button type="button" data-remove-row="${rowIndex}" aria-label="Hapus baris ${rowIndex + 1}" title="Hapus baris" class="w-6 h-7 grid place-items-center text-rose-300 hover:bg-rose-500/10 rounded"><i data-lucide="x" class="w-3 h-3"></i></button></div>
+                    </td>
+                    ${questionTableHeaders.map((_, columnIndex) => `<td class="border border-slate-800 p-1"><input data-table-cell data-row="${rowIndex}" data-column="${columnIndex}" value="${escapeHtml(row[columnIndex] ?? '')}" aria-label="Baris ${rowIndex + 1}, kolom ${columnIndex + 1}" class="w-full min-w-28 bg-slate-950 px-2 py-2 text-sm text-slate-100 outline-none focus:ring-1 focus:ring-emerald-500"></td>`).join('')}
+                </tr>`).join('');
+            lucide.createIcons();
+        }
+
+        function addQuestionTableColumn() {
+            const table = readQuestionTableFromEditor();
+            if (table.headers.length >= 10) {
+                setAdminQuestionsMessage('Maksimal sepuluh kolom per tabel.', true);
+                return;
+            }
+            questionTableHeaders = [...table.headers, `Kolom ${String.fromCharCode(65 + table.headers.length)}`];
+            questionTableRows = table.rows.map((row) => [...row, '']);
+            renderQuestionTable();
+        }
+
+        function removeQuestionTableColumn(index) {
+            const table = readQuestionTableFromEditor();
+            if (table.headers.length <= 1) {
+                setAdminQuestionsMessage('Tabel harus memiliki minimal satu kolom.', true);
+                return;
+            }
+            questionTableHeaders = table.headers.filter((_, columnIndex) => columnIndex !== index);
+            questionTableRows = table.rows.map((row) => row.filter((_, columnIndex) => columnIndex !== index));
+            renderQuestionTable();
+        }
+
+        function addQuestionTableRow() {
+            const table = readQuestionTableFromEditor();
+            if (table.rows.length >= 30) {
+                setAdminQuestionsMessage('Maksimal 30 baris data per tabel.', true);
+                return;
+            }
+            questionTableHeaders = table.headers;
+            questionTableRows = [...table.rows, table.headers.map(() => '')];
+            renderQuestionTable();
+        }
+
+        function removeQuestionTableRow(index) {
+            const table = readQuestionTableFromEditor();
+            if (table.rows.length <= 1) {
+                setAdminQuestionsMessage('Tabel harus memiliki minimal satu baris data.', true);
+                return;
+            }
+            questionTableHeaders = table.headers;
+            questionTableRows = table.rows.filter((_, rowIndex) => rowIndex !== index);
+            renderQuestionTable();
         }
 
         function closeQuestionEditor() {
@@ -1386,6 +1520,8 @@
             event.preventDefault();
             const questionId = document.getElementById('questionId').value;
             const previous = questionBank.find((item) => item.id === questionId);
+            const options = [...document.querySelectorAll('[data-question-option]')].map((input) => input.value.trim());
+            const table = readQuestionTableFromEditor();
             const nextQuestion = {
                 ...previous,
                 id: questionId || (window.crypto?.randomUUID?.() || `question-${Date.now()}`),
@@ -1393,14 +1529,18 @@
                 level: document.getElementById('questionLevel').value,
                 className: document.getElementById('questionClass').value,
                 question: document.getElementById('questionText').value.trim(),
-                options: [0, 1, 2, 3].map((index) => document.getElementById(`questionOption${index}`).value.trim()),
+                options,
                 correctAnswer: Number(document.getElementById('questionCorrectAnswer').value),
                 explanation: document.getElementById('questionExplanation').value.trim(),
-                sheetHeaders: previous?.sheetHeaders || ['Data', 'Hasil'],
-                sheetRows: previous?.sheetRows || [['Contoh', '[ ? ]']],
+                sheetHeaders: table.headers,
+                sheetRows: table.rows.map((row, index) => [index + 2, ...row]),
             };
-            if (nextQuestion.options.some((option) => !option)) {
-                setAdminQuestionsMessage('Isi semua empat opsi jawaban.', true);
+            if (nextQuestion.options.length < 2 || nextQuestion.options.some((option) => !option)) {
+                setAdminQuestionsMessage('Isi minimal dua opsi jawaban dan jangan biarkan opsi kosong.', true);
+                return;
+            }
+            if (!table.headers.length || table.headers.length !== table.rows[0]?.length || table.headers.some((header) => !header)) {
+                setAdminQuestionsMessage('Isi semua header kolom tabel.', true);
                 return;
             }
 
@@ -2103,6 +2243,9 @@
             importJSON,
             logoutAdmin,
             navigateQuestion,
+            addQuestionOption,
+            addQuestionTableColumn,
+            addQuestionTableRow,
             closeQuestionEditor,
             deleteQuestion,
             openQuestionEditor,
